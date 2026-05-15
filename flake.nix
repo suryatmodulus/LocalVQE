@@ -36,6 +36,21 @@
             pkgs.libsndfile
           ];
         };
+
+        # OBS plugin shell: libobs headers + CMake config alongside the
+        # parent project's build deps (the plugin links libvqe.so, so you
+        # typically build both in the same tree). Use with
+        #   nix develop .#obs-plugin
+        # then configure obs-plugin/ as a normal CMake project.
+        obs-plugin = pkgs.mkShell {
+          packages = [
+            pkgs.cmake
+            pkgs.gcc
+            pkgs.pkg-config
+            pkgs.libsndfile
+            pkgs.obs-studio
+          ];
+        };
       };
     };
 }
