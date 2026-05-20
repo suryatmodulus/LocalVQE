@@ -79,14 +79,18 @@ LOCALVQE_API int localvqe_options_set_device(localvqe_options_t opts,
 /**
  * Override the CPU thread count used by the ggml backend.
  *
- * 0 means "auto" (max(1, nproc - 1)) — the same default behaviour you
- * get when neither this setter nor GGML_NTHREADS is set. Positive
- * values are passed straight to ggml_backend_set_n_threads. Capped to
- * 32 to catch obvious mistakes.
+ * 0 means "auto": min(4, sched_getaffinity-count) on Linux,
+ * min(4, hardware_concurrency) elsewhere. The 4-thread cap reflects
+ * measured diminishing returns past ~4 threads for this model size
+ * (see README benchmark tables); affinity-aware sizing keeps the
+ * default safe under taskset / cgroup / VM CPU limits. Same default
+ * behaviour you get when neither this setter nor GGML_NTHREADS is set.
+ * Positive values are passed straight to ggml_backend_set_n_threads,
+ * bypassing the cap. Capped to 32 to catch obvious mistakes.
  *
- * Use when embedded inside a host that already saturates the CPU
- * (real-time audio plugin, game engine) — letting the backend grab
- * N-1 cores will starve the host's own threads.
+ * Use a small explicit value when embedded inside a host that already
+ * saturates the CPU (real-time audio plugin, game engine) and you
+ * want fewer than the auto default.
  *
  * Returns 0 on success, -1 on a null handle, -2 if n_threads < 0 or > 32.
  */

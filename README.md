@@ -102,6 +102,10 @@ iters × 625 hops/iter = 18 750 hops per row.
 | Ryzen 9 7900 (Zen4 desktop)           | CPU     |      16 |  2.12 ms |  2.17 ms |  6.43 ms ‡ |     7.54× |
 | Ryzen 9 7900 + RADV iGPU (Raphael)    | Vulkan  |       — |  4.88 ms |  5.06 ms |  6.24 ms   |     3.28× |
 | Ryzen 9 7900 + RTX 5070 Ti (dGPU)     | Vulkan  |       — |  1.79 ms |  3.42 ms |  5.42 ms   |     8.58× |
+| Ryzen 7 6800U (Zen3+ laptop)          | CPU     |       1 |  4.69 ms |  6.08 ms | 19.31 ms ‡ |     3.37× |
+| Ryzen 7 6800U (Zen3+ laptop)          | CPU     |       4 |  2.11 ms |  2.77 ms |  4.90 ms   |     7.44× |
+| Ryzen 7 6800U (Zen3+ laptop)          | CPU     |       8 |  1.94 ms |  2.60 ms |  5.52 ms   |     7.94× |
+| Ryzen 7 6800U + RADV iGPU (Rembrandt) | Vulkan  |       — |  9.84 ms | 14.75 ms | 20.87 ms ‡ |     1.53× |
 
 The wider echo-search window costs ~20–25 % per-hop on CPU vs v1.1.
 Re-runs of v1.2 on Apple M4 and Alder Lake aren't published yet —
@@ -131,8 +135,13 @@ Adding cores hits diminishing returns quickly: the model is small
 enough that thread-launch and synchronisation overhead start to
 dominate beyond ≈4 threads on these CPUs. The Zen4 v1.2 sweep
 shows it plainly — the 1→4 thread step gives a 2.66× speedup, but
-4→8 is a regression and 8→16 worse still. For deployment, **four
-threads is the sweet spot on Zen4**.
+4→8 is a regression and 8→16 worse still. The 6800U mobile Zen3+
+agrees: 1→4 is a 2.21× speedup, 4→8 only buys another 7%. **The
+library's default thread count is `min(4, sched_getaffinity)`** —
+auto-capped at 4 with respect for `taskset`, cgroup, and VM CPU
+limits, so over-subscription doesn't happen on resource-constrained
+hosts. Pass a non-zero value to `localvqe_options_set_threads` to
+override.
 
 ‡ Outliers are single hops early in the first iteration (cold
 caches); p99 is representative of steady-state.

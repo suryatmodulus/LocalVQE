@@ -71,12 +71,14 @@ _Static_assert((int)SPEAKERS_7POINT1    == 8, "SPEAKERS_7POINT1 must equal 8");
 #define S_REF_SOURCE       "reference_source"
 #define S_THREADS          "n_threads"
 
-/* Bounded so the OBS spinbox can't request something the LocalVQE API
- * would reject (-2 from localvqe_options_set_threads above 32). 4 is a
- * sensible cap for a real-time audio plugin sharing CPU with the rest
- * of the encoder/UI/capture stack. */
-#define LVQE_THREADS_DEFAULT 4
-#define LVQE_THREADS_MIN     1
+/* 0 = auto: the library caps at 4 and respects sched_getaffinity, so
+ * taskset / cgroup / VM CPU limits aren't exceeded. We pick the default
+ * conservatively because the model is small enough that going past ~4
+ * threads has diminishing returns on every CPU we've measured, and a
+ * hard-coded 4 would over-subscribe in resource-constrained envs.
+ * Upper bound stays 32 — that's the API's own validation limit. */
+#define LVQE_THREADS_DEFAULT 0
+#define LVQE_THREADS_MIN     0
 #define LVQE_THREADS_MAX     32
 
 #define T_(s)              obs_module_text(s)

@@ -30,7 +30,31 @@
 #include <dlfcn.h>
 #endif
 
+#if defined(__linux__)
+#include <sched.h>
+#endif
+
 // ── Helpers ───────────────────────────────────────────────────────────────
+
+// Auto thread count for CPU backends. Capped at LVQE_AUTO_THREADS_MAX:
+// the model is small enough that thread-launch + sync overhead dominates
+// past ~4 threads on the CPUs we've measured (see README benchmark
+// tables). On Linux we respect sched_getaffinity so taskset/cgroup/VM
+// limits aren't exceeded — falling back to hardware_concurrency() on
+// other platforms.
+static constexpr int LVQE_AUTO_THREADS_MAX = 4;
+static int auto_n_threads() {
+    int avail = 0;
+#if defined(__linux__)
+    cpu_set_t mask;
+    if (sched_getaffinity(0, sizeof(mask), &mask) == 0) {
+        avail = CPU_COUNT(&mask);
+    }
+#endif
+    if (avail <= 0) avail = (int)std::thread::hardware_concurrency();
+    if (avail <= 0) avail = 1;
+    return std::min(LVQE_AUTO_THREADS_MAX, avail);
+}
 
 // Allocate a compute context (for graph node metadata, not tensor data).
 static struct ggml_context* make_ctx(size_t mem = 256 * 1024) {
@@ -739,7 +763,7 @@ bool load_graph_model_ex(const char* path, dvqe_graph_model& model,
     }
 
     if (n_threads <= 0) {
-        n_threads = std::max(1, (int)std::thread::hardware_concurrency() - 1);
+        n_threads = auto_n_threads();
     }
     auto fn = (ggml_backend_set_n_threads_t)
         ggml_backend_reg_get_proc_address(reg, "ggml_backend_set_n_threads");
