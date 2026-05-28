@@ -146,6 +146,7 @@ set(_dl_script  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/download_asset.cmake)
 set(_gguf_v1    ${_assets_dir}/localvqe-v1-1.3M-f32.gguf)
 set(_gguf_v11   ${_assets_dir}/localvqe-v1.1-1.3M-f32.gguf)
 set(_gguf_v12   ${_assets_dir}/localvqe-v1.2-1.3M-f32.gguf)
+set(_gguf_v13   ${_assets_dir}/localvqe-v1.3-4.8M-f32.gguf)
 file(MAKE_DIRECTORY ${_assets_dir})
 
 function(_dvqe_download OUTFILE URL SHA COMMENT_TEXT)
@@ -171,6 +172,10 @@ _dvqe_download(${_gguf_v12}
     https://huggingface.co/LocalAI-io/LocalVQE/resolve/main/localvqe-v1.2-1.3M-f32.gguf
     4856ecf5f522b23fb2bc5caeac81f323c0ef1c4c156a9c7d40a6adbe092ba9ce
     "Fetching LocalVQE v1.2 F32 model from HuggingFace")
+_dvqe_download(${_gguf_v13}
+    https://huggingface.co/LocalAI-io/LocalVQE/resolve/main/localvqe-v1.3-4.8M-f32.gguf
+    c4f7912485c32cfc206c536f2f050b52513f2f613fdbc616391f6b26ab1d51ec
+    "Fetching LocalVQE v1.3 F32 model from HuggingFace")
 
 # Benchmark (uses C API + WAV I/O)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench.cpp" AND SNDFILE_FOUND)
@@ -249,14 +254,24 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_regression.cpp")
     add_executable(test_regression tests/test_regression.cpp localvqe_api.cpp)
     target_link_libraries(test_regression PRIVATE dvqe_graph)
 
-    add_custom_target(regression-assets DEPENDS ${_gguf_v1} ${_gguf_v11} ${_gguf_v12})
+    add_custom_target(regression-assets
+        DEPENDS ${_gguf_v1} ${_gguf_v11} ${_gguf_v12} ${_gguf_v13})
 
     set(_reg_fix    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures)
     set(_reg_input  ${_reg_fix}/regression_input.f32)
 
-    foreach(_v "v1" "v1.1" "v1.2")
-        set(_reg_gguf localvqe-${_v}-1.3M-f32.gguf)
-        set(_reg_out  ${_reg_fix}/localvqe-${_v}-1.3M-f32.out.f32)
+    # Parallel lists: version tag (for the test name) and param-size suffix
+    # (for the filename). v1.3 broke the implicit "1.3M everywhere"
+    # assumption so each release now spells out its own size.
+    set(_reg_versions "v1"   "v1.1" "v1.2" "v1.3")
+    set(_reg_sizes    "1.3M" "1.3M" "1.3M" "4.8M")
+    list(LENGTH _reg_versions _reg_n)
+    math(EXPR _reg_last "${_reg_n} - 1")
+    foreach(_i RANGE ${_reg_last})
+        list(GET _reg_versions ${_i} _v)
+        list(GET _reg_sizes    ${_i} _sz)
+        set(_reg_gguf localvqe-${_v}-${_sz}-f32.gguf)
+        set(_reg_out  ${_reg_fix}/localvqe-${_v}-${_sz}-f32.out.f32)
         add_test(NAME regression_${_v}_f32
                  COMMAND test_regression
                      --gguf-name ${_reg_gguf}
