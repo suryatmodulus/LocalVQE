@@ -7,8 +7,11 @@
 acoustic echo cancellation (AEC), noise suppression, and dereverberation of
 16 kHz speech, designed to run on commodity CPUs in real time.
 
-- 1.3 M parameters (~5 MB F32)
-- ~1.56 ms per 16 ms frame on Zen4 (4 threads) — **≈10× realtime**
+- Two sizes — choose by CPU budget:
+  - **v1.3 (current)** — 4.8 M parameters (~19 MB F32), ~3.3 ms per 16 ms
+    frame on Zen4 (4 threads), **≈4.7× realtime**.
+  - **v1.2** — 1.3 M parameters (~5 MB F32), ~1.6 ms per 16 ms frame on
+    Zen4 (4 threads), **≈9.7× realtime**.
 - Causal, streaming: 256-sample hop, 16 ms algorithmic latency
 - F32 reference inference in C++ via [GGML](https://github.com/ggml-org/ggml);
   PyTorch reference included for verification and research
@@ -67,8 +70,12 @@ implementation, no streaming runtime. We re-implemented it from the
 paper as a GGML graph at
 [richiejp/deepvqe-ggml](https://github.com/richiejp/deepvqe-ggml)
 (the full-width ~7.5 M-parameter version) before starting LocalVQE.
-LocalVQE is the same idea pruned and rebuilt to ~1.3 M parameters
-(~5 MB F32), small enough to run on commodity CPUs in real time.
+LocalVQE is the same idea rebuilt for streaming CPU inference, and
+published in two sizes: a 1.3 M-parameter compact build (v1.2, ~5 MB
+F32) for tight CPU budgets, and a 4.8 M-parameter wider build (v1.3,
+~19 MB F32) that filters noise better on some clips at ~2× the
+per-hop cost. Both are small enough to run real time on commodity
+CPUs.
 
 ## Model Weights
 
@@ -77,13 +84,22 @@ Pre-trained weights are published on Hugging Face at
 
 | File | Description |
 |---|---|
-| `localvqe-v1.2-1.3M-f32.gguf` | F32 GGUF — what the C++ engine loads. |
-| `localvqe-v1.2-1.3M.pt` | PyTorch checkpoint — for verification, ablation, and downstream research. |
-| `localvqe-v1.1-1.3M-f32.gguf` | Previous release. |
+| `localvqe-v1.3-4.8M-f32.gguf` | F32 GGUF — what the C++ engine loads (current default). |
+| `localvqe-v1.3-4.8M.pt` | PyTorch checkpoint — for verification, ablation, and downstream research. |
+| `localvqe-v1.2-1.3M-f32.gguf` | Compact alternative — same architecture family, ~1/4 the cost per hop. |
+| `localvqe-v1.2-1.3M.pt` | PyTorch checkpoint for the compact variant. |
+| `localvqe-v1.1-1.3M-f32.gguf` | Older release. |
 | `localvqe-v1-1.3M-f32.gguf` | Original release. |
 
-The current release is **v1.2**. It doubles the supported delay window from 500ms to 1 second at a 20% 
-performance cost. It also avoids oversuppression of voices that are near to the noise floor.
+The current release is **v1.3**. It widens the encoder/decoder
+(mic channels `[2,112,32,104,96,152]`, far `[2,64,32]`, bottleneck
+256) and trains from scratch under a noise-floor-aware loss recipe.
+On doubletalk it filters noise better than v1.2 (deg MOS +0.25 on
+the stratified dev sample, with stronger ERLE). On far-end-only
+echo it cancels harder but the residual rates rougher in AECMOS —
+some users will prefer v1.2's gentler trade-off on FE-ST scenes.
+v1.2 stays on the repo as the small/fast option (~1/4 the per-hop
+cost). Both reuse v1.2's 1024 ms echo-search window.
 
 ## Streaming latency
 
@@ -92,25 +108,46 @@ Per-hop, 16 kHz / 256-sample hop → 16 ms budget. Each hop is a full
 `bench-run` cmake target — see [Benchmark](#benchmark) below. 30
 iters × 625 hops/iter = 18 750 hops per row.
 
-### v1.2 (current — 1024 ms echo-search window)
+### v1.3 (current — 4.8 M, wider encoder/decoder, bn 256)
+
+| Hardware                              | Backend | Threads | Hop p50  | Hop p99  | RT factor |
+|---------------------------------------|---------|--------:|---------:|---------:|----------:|
+| Ryzen 9 7900 (Zen4 desktop)           | CPU     |       1 |  9.73 ms | 14.48 ms |     1.58× |
+| Ryzen 9 7900 (Zen4 desktop)           | CPU     |       2 |  5.41 ms |  5.62 ms |     2.95× |
+| Ryzen 9 7900 (Zen4 desktop)           | CPU     |       4 |  3.21 ms |  3.42 ms |     4.97× |
+| Ryzen 9 7900 (Zen4 desktop)           | CPU     |       8 |  3.47 ms |  3.80 ms |     4.59× |
+| Ryzen 9 7900 (Zen4 desktop)           | CPU     |      16 |  3.79 ms |  4.06 ms |     4.19× |
+| Ryzen 9 7900 + RADV iGPU (Raphael)    | Vulkan  |       — |  8.71 ms |  9.15 ms |     1.83× |
+| Ryzen 9 7900 + RTX 5070 Ti (dGPU)     | Vulkan  |       — |  2.57 ms |  4.21 ms |     6.07× |
+
+The wider model is ~2× the per-hop cost of v1.2 in matching
+configurations — the dGPU (RTX 5070 Ti) ends up the fastest option
+for v1.3 by ~1.25× vs 4-thread CPU. The 1-thread case is the
+worst, still real-time (RT 1.58×) but with little margin; running
+v1.3 on a low-core / power-constrained device should use v1.2
+instead. Re-runs on other CPUs (Apple M4, Alder Lake, mobile Zen3+)
+will be published as we collect them — until then the v1.2 sweep
+below is representative shape-wise and expects roughly the same ~2×
+multiplier.
+
+### v1.2 (compact alternative — 1.3 M, 1024 ms echo-search window)
 
 | Hardware                              | Backend | Threads | Hop p50  | Hop p99  | Hop max    | RT factor |
 |---------------------------------------|---------|--------:|---------:|---------:|-----------:|----------:|
-| Ryzen 9 7900 (Zen4 desktop)           | CPU     |       1 |  4.15 ms |  4.53 ms |  6.23 ms   |     3.83× |
-| Ryzen 9 7900 (Zen4 desktop)           | CPU     |       4 |  1.56 ms |  1.73 ms |  4.57 ms   |    10.16× |
-| Ryzen 9 7900 (Zen4 desktop)           | CPU     |       8 |  1.89 ms |  2.15 ms |  6.91 ms ‡ |     8.58× |
-| Ryzen 9 7900 (Zen4 desktop)           | CPU     |      16 |  2.12 ms |  2.17 ms |  6.43 ms ‡ |     7.54× |
-| Ryzen 9 7900 + RADV iGPU (Raphael)    | Vulkan  |       — |  4.88 ms |  5.06 ms |  6.24 ms   |     3.28× |
-| Ryzen 9 7900 + RTX 5070 Ti (dGPU)     | Vulkan  |       — |  1.79 ms |  3.42 ms |  5.42 ms   |     8.58× |
+| Ryzen 9 7900 (Zen4 desktop)           | CPU     |       1 |  4.28 ms |  4.85 ms |  6.23 ms   |     3.72× |
+| Ryzen 9 7900 (Zen4 desktop)           | CPU     |       2 |  2.59 ms |  3.80 ms |  3.81 ms   |     6.09× |
+| Ryzen 9 7900 (Zen4 desktop)           | CPU     |       4 |  1.65 ms |  2.91 ms |  4.57 ms   |     8.90× |
+| Ryzen 9 7900 (Zen4 desktop)           | CPU     |       8 |  1.93 ms |  2.41 ms |  6.91 ms ‡ |     8.22× |
+| Ryzen 9 7900 (Zen4 desktop)           | CPU     |      16 |  2.09 ms |  2.22 ms |  6.43 ms ‡ |     7.69× |
+| Ryzen 9 7900 + RADV iGPU (Raphael)    | Vulkan  |       — |  6.10 ms |  6.53 ms |  6.24 ms   |     2.61× |
+| Ryzen 9 7900 + RTX 5070 Ti (dGPU)     | Vulkan  |       — |  1.96 ms |  3.64 ms |  5.42 ms   |     7.85× |
 | Ryzen 7 6800U (Zen3+ laptop)          | CPU     |       1 |  4.69 ms |  6.08 ms | 19.31 ms ‡ |     3.37× |
 | Ryzen 7 6800U (Zen3+ laptop)          | CPU     |       4 |  2.11 ms |  2.77 ms |  4.90 ms   |     7.44× |
 | Ryzen 7 6800U (Zen3+ laptop)          | CPU     |       8 |  1.94 ms |  2.60 ms |  5.52 ms   |     7.94× |
 | Ryzen 7 6800U + RADV iGPU (Rembrandt) | Vulkan  |       — |  9.84 ms | 14.75 ms | 20.87 ms ‡ |     1.53× |
 
-The wider echo-search window costs ~20–25 % per-hop on CPU vs v1.1.
-Re-runs of v1.2 on Apple M4 and Alder Lake aren't published yet —
-the v1.1 rows below remain representative shape-wise, expect the
-same multiplier.
+The wider echo-search window v1.2 introduced (1024 ms vs v1.1's 512 ms)
+costs ~20–25 % per-hop on CPU vs v1.1.
 
 ### v1.1 (previous — 512 ms echo-search window)
 
@@ -131,13 +168,14 @@ same multiplier.
 | Core i5-14500 + Arc A770 (dGPU)       | Vulkan  |       — | 10.90 ms | 12.00 ms | 13.38 ms   |     1.48× |
 | Core i5-14500 + UHD 770 (iGPU)        | Vulkan  |       — |  9.02 ms | 11.77 ms | 17.93 ms   |     1.74× |
 
-Adding cores hits diminishing returns quickly: the model is small
-enough that thread-launch and synchronisation overhead start to
-dominate beyond ≈4 threads on these CPUs. The Zen4 v1.2 sweep
-shows it plainly — the 1→4 thread step gives a 2.66× speedup, but
-4→8 is a regression and 8→16 worse still. The 6800U mobile Zen3+
-agrees: 1→4 is a 2.21× speedup, 4→8 only buys another 7%. **The
-library's default thread count is `min(4, sched_getaffinity)`** —
+Adding cores hits diminishing returns quickly: even the wider v1.3
+graph is small enough that thread-launch and synchronisation
+overhead start to dominate beyond ≈4 threads on these CPUs. The
+Zen4 sweeps show it plainly on both versions — the 1→4 thread step
+gives a 2.59× speedup on v1.2 and a 3.03× speedup on v1.3, but
+4→8 is a regression on both and 8→16 worse still. The 6800U mobile
+Zen3+ on v1.2 agrees: 1→4 is a 2.21× speedup, 4→8 only buys another
+7%. **The library's default thread count is `min(4, sched_getaffinity)`** —
 auto-capped at 4 with respect for `taskset`, cgroup, and VM CPU
 limits, so over-subscription doesn't happen on resource-constrained
 hosts. Pass a non-zero value to `localvqe_options_set_threads` to
@@ -188,6 +226,7 @@ which trades raw cancellation for fewer near-end gating artefacts.
 
 PyTorch checkpoint integrity (SHA256):
 
+    22d3e2f33bb8b25ec1c6a928cfb741bb631d45bae2b3759684818b101c95878e  localvqe-v1.3-4.8M.pt
     ff6885e7c8d7d29a8ce963303dcd668ae0f2a7bdafae28631292fe6f06f7cd77  localvqe-v1.2-1.3M.pt
 
 ## Repository Layout
@@ -353,7 +392,7 @@ calibration have been worked through.
 
 `obs-plugin/` wraps `liblocalvqe.so` as an OBS Studio audio source
 filter. Once installed it appears as **"LocalVQE (AEC + Noise +
-Dereverb)"** in any audio source's filter list. The bundled v1.2 GGUF
+Dereverb)"** in any audio source's filter list. The bundled v1.3 GGUF
 is preselected on first use, so noise suppression and dereverberation
 work out of the box; AEC additionally requires picking a reference
 source — typically "Desktop Audio" — so the model knows what's
@@ -371,7 +410,7 @@ cmake --build ggml/build -j$(nproc)
 
 # Stage the bundled GGUF so the plugin's default-model resolver finds it.
 cmake --build ggml/build --target regression-assets
-cp ggml/build/bench_assets/localvqe-v1.2-1.3M-f32.gguf obs-plugin/data/
+cp ggml/build/bench_assets/localvqe-v1.3-4.8M-f32.gguf obs-plugin/data/
 
 # Plugin
 cmake -S obs-plugin -B obs-plugin/build -DCMAKE_BUILD_TYPE=Release
@@ -391,7 +430,7 @@ Restart OBS, right-click any audio source → Filters → Add → **LocalVQE**.
 
 | Property              | Default | Notes                                                                                              |
 |-----------------------|---------|----------------------------------------------------------------------------------------------------|
-| Model (.gguf)         | bundled | Auto-resolved to `data/localvqe-v1.2-1.3M-f32.gguf` if staged; otherwise browse to a path.        |
+| Model (.gguf)         | bundled | Auto-resolved to `data/localvqe-v1.3-4.8M-f32.gguf` if staged; otherwise browse to a path.        |
 | Inference threads     | 4       | Sweet spot on Zen4 (see the benchmark table). Changing this rebuilds the model ctx.               |
 | Residual noise gate   | off     | Mutes hops below an RMS threshold; cleans up quiet model residual during silence.                 |
 | Gate threshold (dBFS) | -45     | Only used when the gate is on. -45 mutes the typical -60 dBFS residual but preserves speech.      |
@@ -401,7 +440,7 @@ Without a reference, the AEC head sees silence and contributes nothing
 — the filter still runs noise suppression and dereverberation on the
 mic alone. With a reference, the plugin time-aligns it to the mic
 queue via OBS timestamps; the model's AlignBlock then absorbs the
-remaining speaker→mic acoustic delay (up to ~1 s on v1.2).
+remaining speaker→mic acoustic delay (up to ~1 s on v1.2 and v1.3).
 
 Tested on Linux. macOS uses the same POSIX `dladdr` path and is
 expected to work unchanged. The Windows path is implemented (via

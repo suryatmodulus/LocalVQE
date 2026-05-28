@@ -49,7 +49,7 @@ set_target_properties(obs-localvqe PROPERTIES
 # User-local install layout that OBS discovers automatically:
 #   ~/.config/obs-studio/plugins/obs-localvqe/bin/64bit/obs-localvqe.so
 #   ~/.config/obs-studio/plugins/obs-localvqe/data/locale/en-US.ini
-#   ~/.config/obs-studio/plugins/obs-localvqe/data/localvqe-v1.1-1.3M-f32.gguf
+#   ~/.config/obs-studio/plugins/obs-localvqe/data/localvqe-v1.3-4.8M-f32.gguf
 set(OBS_PLUGIN_DESTINATION
     "$ENV{HOME}/.config/obs-studio/plugins/obs-localvqe"
     CACHE PATH "OBS plugin install root")

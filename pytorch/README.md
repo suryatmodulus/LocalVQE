@@ -63,12 +63,15 @@ GGUF `localvqe.version` metadata key:
 
 | `arch_version` | Norm + activation | Matches |
 |---|---|---|
-| `3` (default) | pre-norm `CausalGroupNorm` + `SiLU`, decoder `skip_norm`, `SubpixelConv2d.norm`, `dmax=64` | `localvqe-v1.2-1.3M.pt` (current) |
+| `3` (default) | pre-norm `CausalGroupNorm` + `SiLU`, decoder `skip_norm`, `SubpixelConv2d.norm`, `dmax=64` | `localvqe-v1.3-4.8M.pt` (current), `localvqe-v1.2-1.3M.pt` |
 | `2` | pre-norm `CausalGroupNorm` + `ReLU6`, decoder `skip_norm`, `SubpixelConv2d.norm`, `dmax=32` | `localvqe-v1.1-1.3M.pt` |
 | `1` | post-conv `BatchNorm2d` + `ELU` (legacy) | pre-v1.1 PyTorch checkpoints / `localvqe-v1-1.3M-f32.gguf` |
 
-Pass `arch_version=2` (and set `dmax: 32`) in the config to load a v1.1
-checkpoint; the default loads the current v1.2 `.pt`.
+v1.2 and v1.3 share `arch_version=3`; they differ only in width
+(`mic_channels`, `far_channels`, `bottleneck_hidden` in the YAML),
+which the loader picks up from the checkpoint's saved `model_config`
+when present. Pass `arch_version=2` (and set `dmax: 32`) in the
+config to load a v1.1 checkpoint instead.
 
 ## Tests
 

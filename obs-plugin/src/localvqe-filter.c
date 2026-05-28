@@ -513,6 +513,7 @@ static void lvqe_defaults(obs_data_t *s)
 	/* Resolve the bundled GGUF as the default model path so a fresh
 	 * install "just works". Keep ordered newest-first. */
 	static const char *const candidates[] = {
+		"localvqe-v1.3-4.8M-f32.gguf",
 		"localvqe-v1.2-1.3M-f32.gguf",
 		"localvqe-v1.1-1.3M-f32.gguf",
 		"localvqe-v1-1.3M-f32.gguf",
