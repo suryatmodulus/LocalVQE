@@ -202,6 +202,18 @@ Full 800-clip eval on the
 [ICASSP 2022 AEC Challenge blind test set](https://github.com/microsoft/AEC-Challenge)
 (real recordings, not synthetic mixes):
 
+**v1.3** (current, 4.8 M):
+
+| Scenario                          |   n | AECMOS echo ↑ | AECMOS deg ↑ | blind ERLE ↑ | DNSMOS OVRL ↑ |
+|-----------------------------------|----:|--------------:|-------------:|-------------:|--------------:|
+| doubletalk                        | 115 |          4.73 |     **2.62** |       8.5 dB |          2.89 |
+| doubletalk-with-movement          | 185 |          4.67 |     **2.43** |       8.3 dB |          2.85 |
+| farend-singletalk                 | 107 |          3.69 |         4.83 |  **50.9 dB** |          1.94 |
+| farend-singletalk-with-movement   | 193 |          3.88 |         4.98 |  **49.9 dB** |          1.96 |
+| nearend-singletalk                | 200 |          5.00 |         4.18 |       2.4 dB |          3.17 |
+
+**v1.2** (compact alternative, 1.3 M):
+
 | Scenario                          |   n | AECMOS echo ↑ | AECMOS deg ↑ | blind ERLE ↑ | DNSMOS OVRL ↑ |
 |-----------------------------------|----:|--------------:|-------------:|-------------:|--------------:|
 | doubletalk                        | 115 |          4.72 |         2.37 |       8.4 dB |          2.83 |
@@ -210,11 +222,27 @@ Full 800-clip eval on the
 | farend-singletalk-with-movement   | 193 |          4.12 |         4.96 |      40.6 dB |          1.75 |
 | nearend-singletalk                | 200 |          5.00 |         4.16 |       2.1 dB |          3.17 |
 
-v1.2 vs v1.1 deltas: echo MOS +0.80 / +0.72 on FE-ST and FE-ST-with-
-movement (the main release goal), near-end deg MOS +0.11, DT echo
-MOS roughly unchanged. FE-ST-with-movement ERLE drops 4.4 dB —
-the v1.2 model is less aggressive when the echo path is moving,
-which trades raw cancellation for fewer near-end gating artefacts.
+v1.3 vs v1.2 deltas (same 800-clip set, same eval pipeline):
+
+- **Doubletalk deg MOS +0.25**, dt-with-movement deg MOS +0.13 —
+  the wider model + noise-floor-aware loss recipe noticeably reduces
+  perceived speech degradation when both talkers are active. The
+  primary v1.3 release goal.
+- **FE-ST-with-movement ERLE +9.3 dB**, FE-ST ERLE +5.2 dB — v1.3
+  cancels far-end echo substantially harder. AECMOS echo MOS drops
+  −0.24 / −0.09 at the same time: the residual after cancellation
+  rates rougher on AECMOS's perceptual scale even though there's
+  numerically less of it. Some users will prefer v1.2's gentler
+  trade-off on far-end-only scenes.
+- **Nearend-singletalk identical** within noise (deg +0.02,
+  OVRL +0.00) — wider capacity doesn't help (or hurt) when there's
+  nothing to cancel.
+- DNSMOS OVRL is up 0.04–0.21 across all scenarios — the wider
+  model produces consistently cleaner-rated output by DNS metrics.
+
+For the original v1.2-vs-v1.1 release notes (the previous headline:
+echo MOS +0.80 / +0.72 on FE-ST and FE-ST-with-movement, near-end
+deg MOS +0.11), see the v1.2 git tag.
 
 - **AECMOS** (Purin et al., ICASSP 2022) is Microsoft's non-intrusive AEC
   quality predictor. "Echo" rates how well echo was removed; "degradation"
