@@ -21,8 +21,9 @@ Try it: <https://huggingface.co/spaces/LocalAI-io/LocalVQE-demo>.
 LocalVQE is a derivative of **DeepVQE**
 ([Indenbom et al., Interspeech 2023](https://arxiv.org/abs/2306.03177)) —
 smaller, GGML-native, and tuned for streaming CPU inference. The
-architecture is documented in [`ARCHITECTURE.md`](ARCHITECTURE.md);
-this README covers building and running the published weights only.
+PyTorch reference model under [`pytorch/localvqe/`](pytorch/localvqe/)
+is the source of truth for the block-level architecture; this README
+covers building and running the published weights.
 
 ## A concrete example
 
@@ -295,7 +296,6 @@ PyTorch checkpoint integrity (SHA256):
 ggml/        C++ streaming inference (GGML graph, CLI, C API, tests)
 pytorch/     PyTorch reference implementation (model definition only)
 obs-plugin/  OBS Studio audio filter wrapping liblocalvqe.so
-ARCHITECTURE.md
 CITATION.cff
 LICENSE
 flake.nix
