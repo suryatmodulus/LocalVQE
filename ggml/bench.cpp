@@ -12,8 +12,33 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <string>
 #include <vector>
+
+// Linux: read a kB-valued key (e.g. "VmRSS:", "VmHWM:") out of
+// /proc/self/status. Returns 0 if the file or key isn't available
+// (other OSes, sandboxes), so callers can skip the memory section
+// instead of printing garbage.
+static size_t read_proc_status_kb(const char* key) {
+    std::ifstream f("/proc/self/status");
+    if (!f.is_open()) return 0;
+    std::string line;
+    size_t klen = std::string(key).size();
+    while (std::getline(f, line)) {
+        if (line.compare(0, klen, key) == 0) {
+            size_t i = klen;
+            while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) i++;
+            size_t v = 0;
+            while (i < line.size() && line[i] >= '0' && line[i] <= '9') {
+                v = v * 10 + (size_t)(line[i] - '0');
+                i++;
+            }
+            return v;
+        }
+    }
+    return 0;
+}
 
 static void usage(FILE* out) {
     fprintf(out,
@@ -76,6 +101,11 @@ int main(int argc, char** argv) {
     printf("Input: %d samples (%.2f s)\n", n, n / (float)SR);
     printf("Iterations: %d\n\n", iters);
 
+    // Pre-load RSS = process baseline (binary + linked libs + already-touched
+    // input WAVs). The post-load delta below isolates the LocalVQE working
+    // set from this baseline.
+    size_t rss_kb_pre_load = read_proc_status_kb("VmRSS:");
+
     uintptr_t opts = localvqe_options_new();
     localvqe_options_set_model_path(opts, model_path);
     localvqe_options_set_backend(opts, backend_name);
@@ -83,6 +113,8 @@ int main(int argc, char** argv) {
     uintptr_t ctx = localvqe_new_with_options(opts);
     localvqe_options_free(opts);
     if (!ctx) { fprintf(stderr, "Failed to load model\n"); return 1; }
+
+    size_t rss_kb_post_load = read_proc_status_kb("VmRSS:");
 
     if (profile) localvqe_print_profile(ctx);
 
@@ -161,6 +193,30 @@ int main(int argc, char** argv) {
     double secs = n / (double)SR;
     printf("Realtime factor (mean): %.2fx on %.2f s of audio\n\n",
            secs / (mean / 1e6), secs);
+
+    // Memory section. VmHWM is the peak resident set during the whole
+    // process lifetime, which after warmup + iters covers steady-state
+    // streaming. For GPU backends this only captures host memory — VRAM
+    // usage isn't visible in /proc/self/status and `--profile` reports
+    // the backend-internal weight+activation buffer sizes instead.
+    size_t rss_kb_peak = read_proc_status_kb("VmHWM:");
+    if (rss_kb_pre_load || rss_kb_post_load || rss_kb_peak) {
+        auto mib = [](size_t kb) { return (double)kb / 1024.0; };
+        printf("Memory (RSS, from /proc/self/status):\n");
+        printf("  pre-load:         %7.1f MiB  (binary + libs + input PCM)\n",
+               mib(rss_kb_pre_load));
+        printf("  post-load:        %7.1f MiB  (+%.1f MiB model & backend init)\n",
+               mib(rss_kb_post_load),
+               mib(rss_kb_post_load > rss_kb_pre_load
+                       ? rss_kb_post_load - rss_kb_pre_load : 0));
+        printf("  peak (VmHWM):     %7.1f MiB  (steady-state ceiling)\n",
+               mib(rss_kb_peak));
+        const char* bn = backend_name ? backend_name : "";
+        if (bn[0] && (bn[0] != 'C' || bn[1] != 'P' || bn[2] != 'U')) {
+            printf("  (GPU backend: VRAM not included — see --profile for the\n"
+                   "   backend-internal weight/activation buffer sizes.)\n");
+        }
+    }
 
     localvqe_free(ctx);
     return 0;
