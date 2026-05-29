@@ -196,6 +196,40 @@ outliers cluster at post-`localvqe_reset()` boundaries (cold path)
 or scatter through the stream (external contention). In practice we
 see the latter.
 
+### Memory footprint (CPU)
+
+`bench` reports process RSS from `/proc/self/status` alongside the
+internal allocator accounting from `--profile`. The numbers are
+essentially thread-count-invariant — both 1 and 16 threads land on
+the same peak within a few hundred KiB — so one row per model
+suffices.
+
+| Model            | Post-load delta ¹ | Peak RSS (VmHWM) ² | Internal `total resident` ³ |
+|------------------|------------------:|-------------------:|----------------------------:|
+| **v1.3** (4.8 M) | +24.4 MiB         |  34.1 MiB          |  23.0 MiB                   |
+| **v1.2** (1.3 M) | +10.0 MiB         |  19.6 MiB          |   8.7 MiB                   |
+
+¹ RSS added by `localvqe_new_with_options` + CPU backend init, on
+top of the ~7 MiB binary/libs baseline measured by `bench` itself.
+This is the portable "working set the model brings" number; the
+absolute peak will depend on your host process baseline.
+
+² `VmHWM` after warmup + sustained streaming on a Zen4 desktop
+(Ryzen 9 7900). v1.3 is ~1.75× v1.2 in RSS terms despite carrying
+~3.7× more parameters — activation, history-scratch, and per-frame
+history buffers don't scale with channel width the way the weight
+buffer does.
+
+³ Backend-internal accounting from `bench --profile`: the sum of
+the weights buffer, activation buffer (gallocr), and one-shot
+history scratch. Excludes the double-buffered history-tensor swap
+pages (already counted in the activation buffer for the read side).
+
+For GPU backends (Vulkan), RSS understates real usage — VRAM isn't
+visible in `/proc/self/status`. Use `bench --profile` on the GPU
+build to read the same weights/activation/scratch breakdown from
+the backend-internal allocator.
+
 ## Validation Results
 
 Full 800-clip eval on the
