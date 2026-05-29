@@ -20,10 +20,7 @@ Try it: <https://huggingface.co/spaces/LocalAI-io/LocalVQE-demo>.
 
 LocalVQE is a derivative of **DeepVQE**
 ([Indenbom et al., Interspeech 2023](https://arxiv.org/abs/2306.03177)) —
-smaller, GGML-native, and tuned for streaming CPU inference. The
-PyTorch reference model under [`pytorch/localvqe/`](pytorch/localvqe/)
-is the source of truth for the block-level architecture; this README
-covers building and running the published weights.
+smaller, GGML-native, and tuned for streaming CPU inference.
 
 ## A concrete example
 
